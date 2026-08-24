@@ -1,0 +1,144 @@
+-- 1. TẠO DATABASE
+DROP DATABASE IF EXISTS luyentu;
+CREATE DATABASE luyentu CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE luyentu;
+
+-- 2. TẠO CÁC BẢNG HỆ THỐNG
+CREATE TABLE users (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    email           VARCHAR(255) NOT NULL UNIQUE,
+    password_hash   VARCHAR(255) NOT NULL,
+    name            VARCHAR(100),
+    avatar_url      VARCHAR(500),
+    current_streak  INT UNSIGNED DEFAULT 0,
+    longest_streak  INT UNSIGNED DEFAULT 0,
+    last_study_date DATE NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE categories (
+    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL,
+    slug        VARCHAR(100) NOT NULL UNIQUE,
+    type        ENUM('exam', 'level', 'topic', 'source') DEFAULT 'exam',
+    description TEXT,
+    parent_id   INT UNSIGNED NULL,
+    sort_order  INT DEFAULT 0,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE words (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    word            VARCHAR(150) NOT NULL,
+    phonetic        VARCHAR(100),
+    part_of_speech  VARCHAR(50),
+    meaning_vi      TEXT NOT NULL,
+    meaning_en      TEXT,
+    example_en      TEXT,
+    example_vi      TEXT,
+    audio_url       VARCHAR(500),
+    image_url       VARCHAR(500),
+    difficulty      TINYINT UNSIGNED DEFAULT 1,
+    is_official     BOOLEAN DEFAULT TRUE,
+    created_by      BIGINT UNSIGNED NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    INDEX idx_word (word),
+    FULLTEXT INDEX ft_word_meaning (word, meaning_vi, meaning_en),
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE word_lists (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name            VARCHAR(200) NOT NULL,
+    slug            VARCHAR(200),
+    description     TEXT,
+    cover_url       VARCHAR(500),
+    is_public       BOOLEAN DEFAULT TRUE,
+    is_official     BOOLEAN DEFAULT FALSE,
+    created_by      BIGINT UNSIGNED NULL,
+    total_words     INT UNSIGNED DEFAULT 0,
+    category_id     INT UNSIGNED NULL,
+    level           VARCHAR(50),
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+    INDEX idx_official (is_official),
+    INDEX idx_public (is_public)
+) ENGINE=InnoDB;
+
+CREATE TABLE word_list_items (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    word_list_id    BIGINT UNSIGNED NOT NULL,
+    word_id         BIGINT UNSIGNED NOT NULL,
+    sort_order      INT DEFAULT 0,
+    added_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE KEY uk_list_word (word_list_id, word_id),
+    FOREIGN KEY (word_list_id) REFERENCES word_lists(id) ON DELETE CASCADE,
+    FOREIGN KEY (word_id) REFERENCES words(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE user_word_lists (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id         BIGINT UNSIGNED NOT NULL,
+    word_list_id    BIGINT UNSIGNED NOT NULL,
+    is_active       BOOLEAN DEFAULT TRUE,
+    started_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_studied_at DATETIME NULL,
+    
+    UNIQUE KEY uk_user_list (user_id, word_list_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (word_list_id) REFERENCES word_lists(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE user_word_progress (
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id             BIGINT UNSIGNED NOT NULL,
+    word_id             BIGINT UNSIGNED NOT NULL,
+    status              ENUM('new', 'learning', 'review', 'mastered') DEFAULT 'new',
+    ease_factor         DECIMAL(4,2) DEFAULT 2.50,
+    interval_days       INT DEFAULT 0,
+    repetitions         INT UNSIGNED DEFAULT 0,
+    lapses              INT UNSIGNED DEFAULT 0,
+    next_review_at      DATETIME NULL,
+    last_reviewed_at    DATETIME NULL,
+    correct_count       INT UNSIGNED DEFAULT 0,
+    wrong_count         INT UNSIGNED DEFAULT 0,
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    UNIQUE KEY uk_user_word (user_id, word_id),
+    INDEX idx_next_review (user_id, next_review_at),
+    INDEX idx_status (user_id, status),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (word_id) REFERENCES words(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE review_logs (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id         BIGINT UNSIGNED NOT NULL,
+    word_id         BIGINT UNSIGNED NOT NULL,
+    rating          TINYINT NOT NULL,
+    time_taken_ms   INT UNSIGNED,
+    reviewed_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (word_id) REFERENCES words(id) ON DELETE CASCADE,
+    INDEX idx_user_date (user_id, reviewed_at)
+) ENGINE=InnoDB;
+
+-- 3. BẢNG TẠM VÀ IMPORT FILE
+CREATE TABLE temp_oxford (
+    word VARCHAR(150),
+    level VARCHAR(10),
+    pos VARCHAR(50),
+    definition_url TEXT,
+    voice_url TEXT
+);
+
